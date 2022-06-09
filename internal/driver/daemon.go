@@ -289,6 +289,12 @@ func (r *RegistryDefault) ReadRouter(ctx context.Context) http.Handler {
 	for _, f := range r.defaultHttpMiddlewares {
 		n.UseFunc(f)
 	}
+
+	n.UseFunc(func(rw http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
+		r.l.Infof("request protocol %s", req.Proto)
+		next(rw, req)
+	})
+
 	n.Use(reqlog.NewMiddlewareFromLogger(r.l, "read#Ory Keto").ExcludePaths(healthx.AliveCheckPath, healthx.ReadyCheckPath))
 
 	br := &x.ReadRouter{Router: httprouter.New()}
