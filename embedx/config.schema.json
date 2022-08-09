@@ -29,7 +29,7 @@
         }
       },
       "additionalProperties": false,
-      "required": ["name", "id"]
+      "required": ["name"]
     },
     "tlsxSource": {
       "type": "object",
