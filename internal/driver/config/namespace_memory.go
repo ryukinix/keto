@@ -21,13 +21,9 @@ type (
 var _ namespace.Manager = &memoryNamespaceManager{}
 
 func NewMemoryNamespaceManager(nn ...*namespace.Namespace) *memoryNamespaceManager {
-	nm := &memoryNamespaceManager{
-		byName: make(map[string]*namespace.Namespace),
-	}
-	for _, n := range nn {
-		nm.byName[n.Name] = n
-	}
-	return nm
+	s := &memoryNamespaceManager{}
+	s.set(nn)
+	return s
 }
 
 func (s *memoryNamespaceManager) GetNamespaceByName(_ context.Context, name string) (*namespace.Namespace, error) {
@@ -75,15 +71,12 @@ func (s *memoryNamespaceManager) ShouldReload(newValue interface{}) bool {
 	return !reflect.DeepEqual(newValue, nn)
 }
 
-func (s *memoryNamespaceManager) add(n *namespace.Namespace) {
+func (s *memoryNamespaceManager) set(nn []*namespace.Namespace) {
 	s.Lock()
 	defer s.Unlock()
 
-	s.byName[n.Name] = n
-}
-func (s *memoryNamespaceManager) delete(n *namespace.Namespace) {
-	s.Lock()
-	defer s.Unlock()
-
-	delete(s.byName, n.Name)
+	s.byName = make(map[string]*namespace.Namespace, len(nn))
+	for _, n := range nn {
+		s.byName[n.Name] = n
+	}
 }

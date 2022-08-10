@@ -7,22 +7,20 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ory/keto/embedx"
-
 	"github.com/ory/x/configx"
-
 	"github.com/ory/x/logrusx"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ory/keto/embedx"
 	"github.com/ory/keto/internal/namespace"
 )
 
-// configFile writes the content to a temporary file, returning the path.
+// createFile writes the content to a temporary file, returning the path.
 // Good for testing config files.
-func configFile(t *testing.T, content string) (path string) {
+func createFile(t *testing.T, content string) (path string) {
 	t.Helper()
 
 	f, err := os.CreateTemp(t.TempDir(), "config-*.yaml")
@@ -43,41 +41,49 @@ func configFile(t *testing.T, content string) (path string) {
 	return f.Name()
 }
 
-func TestKoanfNamespaceManager(t *testing.T) {
-	setup := func(t *testing.T, configFile string) (*test.Hook, *Config) {
-		hook := test.Hook{}
-		l := logrusx.New("test", "today", logrusx.WithHook(&hook))
+// createFileF writes the content format string with the applied args to a
+// temporary file, returning the path. Good for testing config files.
+func createFileF(t *testing.T, contentF string, args ...any) (path string) {
+	return createFile(t, fmt.Sprintf(contentF, args...))
+}
 
-		ctx, cancel := context.WithCancel(context.Background())
-		t.Cleanup(cancel)
+func setup(t *testing.T, configFile string) (*test.Hook, *Config) {
+	t.Helper()
+	hook := test.Hook{}
+	l := logrusx.New("test", "today", logrusx.WithHook(&hook))
 
-		config, err := NewDefault(
-			ctx,
-			pflag.NewFlagSet("test", pflag.ContinueOnError),
-			l,
-			// configx.SkipValidation(),
-			configx.WithConfigFiles(configFile),
-		)
-		require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 
-		return &hook, config
-	}
+	config, err := NewDefault(
+		ctx,
+		pflag.NewFlagSet("test", pflag.ContinueOnError),
+		l,
+		configx.WithConfigFiles(configFile),
+	)
+	require.NoError(t, err)
 
-	assertNamespaces := func(t *testing.T, p *Config, nn ...*namespace.Namespace) {
-		nm, err := p.NamespaceManager()
-		require.NoError(t, err)
+	return &hook, config
+}
 
-		actualNamespaces, err := nm.Namespaces(context.Background())
-		require.NoError(t, err)
-		assert.Equal(t, len(nn), len(actualNamespaces))
+func assertNamespaces(t *testing.T, p *Config, nn ...*namespace.Namespace) {
+	t.Helper()
 
-		for _, n := range nn {
-			assert.Contains(t, actualNamespaces, n)
-		}
-	}
+	nm, err := p.NamespaceManager()
+	require.NoError(t, err)
+	actualNamespaces, err := nm.Namespaces(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, len(nn), len(actualNamespaces))
+	assert.ElementsMatch(t, nn, actualNamespaces)
+}
 
+// The new way to configure namespaces is through the Ory Permissions Language.
+// We check here that we still support enumerating the namespaces directly in
+// the config or through a file reference, in which case there should be no
+// rewrites configured.
+func TestLegacyNamespaceConfig(t *testing.T) {
 	t.Run("case=creates memory namespace manager when namespaces are set", func(t *testing.T) {
-		config := configFile(t, `
+		config := createFile(t, `
 dsn: memory
 namespaces:
   - name: n0
@@ -115,7 +121,7 @@ namespaces:
 	})
 
 	t.Run("case=reloads namespace manager when namespaces are updated using Set()", func(t *testing.T) {
-		_, p := setup(t, configFile(t, "dsn: memory"))
+		_, p := setup(t, createFile(t, "dsn: memory"))
 
 		n0 := &namespace.Namespace{
 			Name: "n0",
@@ -132,10 +138,10 @@ namespaces:
 	})
 
 	t.Run("case=creates watcher manager when namespaces is string URL", func(t *testing.T) {
-		_, p := setup(t, configFile(t, fmt.Sprintf(`
+		_, p := setup(t, createFileF(t, `
 dsn: memory
 namespaces: file://%s`,
-			t.TempDir())))
+			t.TempDir()))
 
 		nm, err := p.NamespaceManager()
 		require.NoError(t, err)
@@ -152,4 +158,44 @@ namespaces: file://%s`,
 		assert.Equal(t, "foobar", p.DSN())
 		assert.Same(t, cp, p.p)
 	})
+}
+
+// Test that the namespaces can be configured through the Ory Permission
+// Language.
+func TestRewritesNamespaceConfig(t *testing.T) {
+	t.Run("case=one file", func(t *testing.T) {
+		oplConfig := createFile(t, `
+class User implements Namespace {
+  related: {
+    manager: User[]
+  }
+}
+  
+class Group implements Namespace {
+  related: {
+    members: (User | Group)[]
+  }
+}
+		`)
+		config := createFileF(t, `
+dsn: memory
+namespaces:
+  config: file://%s`, oplConfig)
+
+		_, p := setup(t, config)
+		nm, err := p.NamespaceManager()
+		require.NoError(t, err)
+		namespaces, err := nm.Namespaces(context.Background())
+		require.NoError(t, err)
+		assert.Len(t, namespaces, 2)
+
+		users, groups := namespaces[0], namespaces[1]
+
+		assert.Equal(t, "User", users.Name)
+		assert.Equal(t, "manager", users.Relations[0].Name)
+
+		assert.Equal(t, "Group", groups.Name)
+		assert.Equal(t, "members", groups.Relations[0].Name)
+	})
+
 }
