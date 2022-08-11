@@ -9,7 +9,19 @@
     "namespace": "Group",
     "object": "developer",
     "relation": "members",
-    "subject_id": "henning"
+    "subject_set": {
+      "namespace": "User",
+      "object": "Patrik"
+    }
+  },
+  {
+    "namespace": "Group",
+    "object": "developer",
+    "relation": "members",
+    "subject_set": {
+      "namespace": "User",
+      "object": "Henning"
+    }
   },
   {
     "namespace": "Folder",
@@ -50,8 +62,11 @@
   },
   {
     "namespace": "File",
-    "object": "keto/src/rewrites.go",
+    "object": "private",
     "relation": "owners",
-    "subject_id": "henning"
+    "subject_set": {
+      "namespace": "User",
+      "object": "Henning"
+    }
   }
 ]
