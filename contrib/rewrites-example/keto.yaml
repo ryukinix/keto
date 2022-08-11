@@ -1,0 +1,7 @@
+dsn: memory
+
+namespaces:
+  config: file://./namespaces.keto.ts
+
+log:
+  level: trace

@@ -2,6 +2,7 @@ package check
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ory/herodot"
 	"github.com/pkg/errors"
@@ -115,7 +116,7 @@ func (e *Engine) checkExpandSubject(r *relationTuple, restDepth int) checkgroup.
 					continue
 				}
 				subjectSet, ok := s.Subject.(*relationtuple.SubjectSet)
-				if !ok || subjectSet.Relation == WildcardRelation {
+				if !ok || subjectSet.Relation == WildcardRelation || subjectSet.Relation == "" {
 					continue
 				}
 				g.Add(e.checkIsAllowed(
@@ -201,6 +202,12 @@ func (e *Engine) checkIsAllowed(ctx context.Context, r *relationTuple, restDepth
 }
 
 func (e *Engine) astRelationFor(ctx context.Context, r *relationTuple) (*ast.Relation, error) {
+	// Special case: If the relationTuple's relation is empty, then it is not an
+	// error that the relation was not found.
+	if r.Relation == WildcardRelation || r.Relation == "" {
+		return nil, nil
+	}
+
 	ns, err := e.namespaceFor(ctx, r)
 	if err != nil {
 		// On an unknown namespace the answer should be "not allowed", not "not
@@ -219,7 +226,7 @@ func (e *Engine) astRelationFor(ctx context.Context, r *relationTuple) (*ast.Rel
 			return &rel, nil
 		}
 	}
-	return nil, errors.New("relation not found")
+	return nil, fmt.Errorf("relation %q not found", r.Relation)
 }
 
 func (e *Engine) namespaceFor(ctx context.Context, r *relationTuple) (*namespace.Namespace, error) {
