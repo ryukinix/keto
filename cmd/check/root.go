@@ -3,6 +3,7 @@ package check
 import (
 	"fmt"
 
+	"github.com/ory/keto/ketoapi"
 	rts "github.com/ory/keto/proto/ory/keto/relation_tuples/v1alpha2"
 
 	"github.com/ory/keto/internal/check"
@@ -43,12 +44,16 @@ func newCheckCmd() *cobra.Command {
 			}
 
 			cl := rts.NewCheckServiceClient(conn)
+
+			rt, err := ketoapi.FromString(fmt.Sprintf("%s:%s#%s@%s", args[2], args[3], args[1], args[0]))
+			if err != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Could not create request: %s\n", err)
+				return err
+			}
+
 			resp, err := cl.Check(cmd.Context(), &rts.CheckRequest{
-				Subject:   rts.NewSubjectID(args[0]),
-				Relation:  args[1],
-				Namespace: args[2],
-				Object:    args[3],
-				MaxDepth:  maxDepth,
+				Tuple:    rt.ToProto(),
+				MaxDepth: maxDepth,
 			})
 			if err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Could not make request: %s\n", err)
